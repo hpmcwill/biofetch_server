@@ -1,0 +1,8 @@
+{
+  "tempFileDir": "/tmp",
+  "maxEntries": 200,
+  "timeOut": 60,
+  "chunkSize":204800,
+  "defaultDatabase": "embl",
+  "databaseConfig": "databases.json"
+}
