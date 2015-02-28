@@ -3,7 +3,6 @@
 # A Python 2.x implementation of a BioFetch library.
 # ======================================================================
 # TODO:
-# - Read configuration from file(s) [JSON?]
 # - Handlers for specific data sources
 # - Support for indexing sources [BioPython?]
 # - Support for extensions to the BioFetch spec.

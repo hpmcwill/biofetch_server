@@ -3,13 +3,8 @@
 # A Python 2.x implementation of a CGI based BioFetch server.
 # ======================================================================
 # TODO:
-# - Read configuration from file(s) [JSON?]
-# - Handlers for specific data sources
-# - Support for indexing sources [BioPython?]
 # - Support for extensions to the BioFetch spec.
-# - Response format and content-type checking
 # - Command-line support (check for CGI variables)
-# - Library/module support
 # ======================================================================
 # Module imports
 import cgi, re, sys, traceback, urllib2
