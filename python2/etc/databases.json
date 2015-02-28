@@ -6,16 +6,40 @@
     "defaultDataFormat": "embl",
     "defaultResultStyles":{
       "embl": "html",
-      "fasta": "html",
-      "annot": "raw"
+      "fasta": "html"
     },
     "serviceList":[
+      {
+        "serviceName": "ENA Browser",
+        "serviceUrl": "http://www.ebi.ac.uk/ena/",
+        "primaryAccess":{
+          "accessType": "url",
+          "urlTemplate": "http://www.ebi.ac.uk/ena/data/view/${id}${format}&limit=${maxEntries}",
+          "multipleIdentifierSupport": true,
+          "idSeparator": ",",
+          "idCharacterCase": "upper"
+        },
+        "dataFormats":{
+          "embl":{
+            "value": "&display=text",
+            "resultStyles":{
+              "raw": ""
+            }
+          },
+          "fasta":{
+            "value": "&display=fasta",
+            "resultStyles":{
+              "raw": ""
+            }
+          }
+        }
+      },
       {
         "serviceName": "SRS@DKFZ",
         "serviceUrl": "http://www.dkfz.de/srs/",
         "primaryAccess":{
           "accessType": "url",
-          "urlTemplate": "http://www.dkfz.de/menu/cgi-bin/srs7.1.3.1/wgetz?[${db}-acc:${id}]${format}${style}+-noSession",
+          "urlTemplate": "http://www.dkfz.de/menu/cgi-bin/srs7.1.3.1/wgetz?[EMBLALL-acc:${id}]${format}${style}+-noSession",
           "multipleIdentifierSupport": true,
           "idSeparator": "|"
         },
@@ -35,30 +59,130 @@
             }
           }
         }
-      },
+      }
+    ]
+  },
+  "pdb":{
+    "label": "PDB",
+    "description": "The protein databank (PDB) of macromolecular structures.",
+    "databaseUrl": "http://www.pdb.org/",
+    "defaultDataFormat": "pdb",
+    "defaultResultStyles":{
+      "pdb": "raw"
+    },
+    "serviceList":[
       {
-        "serviceName": "ENA Browser",
-        "serviceUrl": "http://www.ebi.ac.uk/ena/",
+        "serviceName": "PDBe FTP@EMBL-EBI",
         "primaryAccess":{
           "accessType": "url",
-          "urlTemplate": "http://www.ebi.ac.uk/ena/data/view/${id}${format}&limit=${maxEntries}",
-          "multipleIdentifierSupport": true,
-          "idSeparator": ",",
+          "urlTemplate": "ftp://ftp.ebi.ac.uk/pub/databases/msd/pdb_uncompressed/pdb${id}.ent",
+          "multipleIdentifierSupport": false,
+          "idCharacterCase": "lower"
+        },
+        "dataFormats":{
+          "pdb":{
+            "value": "",
+            "resultStyles":{
+              "raw": ""
+            }
+          }
+        }
+      },
+      {
+        "serviceName": "RCSB PDB",
+        "serviceUrl": "http://www.rcsb.org/pdb/",
+        "primaryAccess":{
+          "accessType": "url",
+          "urlTemplate": "http://www.rcsb.org/pdb/files/${id}.${format}",
+          "multipleIdentifierSupport": false,
           "idCharacterCase": "upper"
         },
         "dataFormats":{
-          "embl":{
-            "value": "&display=text",
+          "pdb":{
+            "value": "pdb",
             "resultStyles":{
-              "html": "",
+              "raw": ""
+            }
+          }
+        }
+      },
+      {
+        "serviceName": "PDB FTP@EMBL-EBI",
+        "primaryAccess":{
+          "accessType": "url",
+          "urlTemplate": "ftp://ftp.ebi.ac.uk/pub/databases/pdb/data/structures/all/pdb/pdb${id}.ent.gz",
+          "multipleIdentifierSupport": false,
+          "idCharacterCase": "lower"
+        },
+        "dataFormats":{
+          "pdb":{
+            "value": "",
+	    "compression": "gzip",
+            "resultStyles":{
+              "raw": ""
+            }
+          }
+        }
+      }
+    ]
+  },
+  "uniprotkb":{
+    "label": "UniProtKB",
+    "description": "The universal protein knowledgebase (UniProtKB).",
+    "databaseUrl": "http://www.uniprot.org/help/uniprotkb",
+    "defaultDataFormat": "uniprot",
+    "defaultResultStyles":{
+      "uniprot": "html",
+      "fasta": "html"
+    },
+    "serviceList":[
+      {
+        "serviceName": "UniProt.org",
+        "serviceUrl": "http://www.uniprot.org/",
+        "primaryAccess":{
+          "accessType": "url",
+          "urlTemplate": "http://www.uniprot.org/batch/?query=${id}${format}",
+          "multipleIdentifierSupport": true,
+          "idSeparator": "+",
+          "idCharacterCase": "upper"
+        },
+        "dataFormats":{
+          "uniprot":{
+            "value": "&format=txt",
+            "resultStyles":{
               "raw": ""
             }
           },
           "fasta":{
-            "value": "&display=fasta",
+            "value": "&format=fasta",
+            "resultStyles":{
+              "raw": ""
+            }
+          }
+        }
+      },
+      {
+        "serviceName": "SRS@DKFZ",
+        "serviceUrl": "http://www.dkfz.de/srs/",
+        "primaryAccess":{
+          "accessType": "url",
+          "urlTemplate": "http://www.dkfz.de/menu/cgi-bin/srs7.1.3.1/wgetz?[UNIPROT-id:${id}]|[UNIPROT-acc:${id}]${format}${style}+-noSession",
+          "multipleIdentifierSupport": true,
+          "idSeparator": "|"
+        },
+        "dataFormats":{
+          "uniprot":{
+            "value": "+-e+-vn+2",
             "resultStyles":{
               "html": "",
-              "raw": ""
+              "raw": "+-ascii"
+            }
+          },
+          "fasta":{
+            "value": "+-view+FastaSeqs",
+            "resultStyles":{
+              "html": "",
+              "raw": "+-ascii"
             }
           }
         }
