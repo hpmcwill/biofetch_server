@@ -12,12 +12,10 @@
 # - Library/module support
 # ======================================================================
 # Module imports
-import cgi
+import cgi, re, sys, traceback, urllib2
 import cgitb
 cgitb.enable()
-import re
 from string import Template
-import urllib2
 from biofetch import BioFetch
 
 # Get parameters from GET or POST request.
@@ -109,7 +107,7 @@ elif 'id' in form and len(form['id'].value) > 0:
     except IOError, e:
         print 'Content-Type: text/plain\n'
         print 'ERROR:', '{0} {1} {2}\n'.format(e.errno, e.strerror, e.filename)
-	print e
+	traceback.print_exc(file=sys.stdout)
     #formParametersDebugHtmlOutput() # DEBUG
 # TODO: Handle meta-data resource requests.
 # No idea what was intended, so return form.
