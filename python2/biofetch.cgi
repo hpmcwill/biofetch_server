@@ -108,7 +108,8 @@ elif 'id' in form and len(form['id'].value) > 0:
         resp.close()
     except IOError, e:
         print 'Content-Type: text/plain\n'
-        print 'ERROR:', '{0} {1} {2}'.format(e.errno, e.strerror, e.filename)
+        print 'ERROR:', '{0} {1} {2}\n'.format(e.errno, e.strerror, e.filename)
+	print e
     #formParametersDebugHtmlOutput() # DEBUG
 # TODO: Handle meta-data resource requests.
 # No idea what was intended, so return form.
