@@ -119,8 +119,9 @@ class BioFetch(object):
             resp = urllib2.urlopen(req)
             responseStream = self._httpResponseStream(resp)
         except urllib2.HTTPError, ex:
-            #print ex.read()
             raise IOError(-1, 'HTTP error', url)
+        except urllib2.URLError, e:
+            raise IOError(-1, 'URL error', url)
         return (resp, responseStream)
 
     def _httpResponseStream(self, response):
