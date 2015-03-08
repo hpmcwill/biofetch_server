@@ -227,56 +227,39 @@ class BioFetch(object):
         '''
         Fetch data.
 
-        Returns: the data returned by the back-end service.
+        Parameters:
+        - fh: stream/file handle opened for write. Use sys.stdout for STDOUT.
+        - idStr: list of entry identifiers as a delimited string.
+        - dbName: database name
+        - dataFormat: data format name
+        - resultStyle: result style name
+
+        Returns:
+        The data returned by the back-end service.
+
+        Throws:
+        - BiofetchError: if requested combination of dbName, dataFormat or 
+        resultStyle not found in biofetch configuration.
         '''
-        # Fetch the data stream from the URL.
-        (resp, respStream) = self.fetchDataStream(idStr, dbName, dataFormat, resultStyle)
-        # Read into a string.
-        result = respStream.read()
-        # Close the streams.
-        respStream.close()
-        resp.close()
-        return result
+        strBuff = StringIO()
+        self.fetchDataToStream(strBuff, idStr, dbName, dataFormat, resultStyle)
+        retVal = strBuff.getvalue()
+        strBuff.close()
+        return retVal
 
     def fetchDataToStream(self, fh, idStr, dbName, dataFormat, resultStyle):
         '''
         Fetch data to a stream/file.
 
         Parameters:
-        - fh: stream/file handle opened for write.
-        - idStr:
-        - dbName:
-        - dataFormat:
-        - resultStyle:
-
-        Returns:
-        ?
-
-        Throws:
-        - BiofetchError
-        '''
-        (resp, respStream) = self.fetchDataStream(idStr, dbName, dataFormat, resultStyle)
-        contentType = resp.info().getheader('Content-Type')
-        # TODO: check for CGI web context.
-        print 'Content-Type: {0}\n'.format(contentType)
-        for chunk in iter(lambda: respStream.read(self.settings['chunkSize']), ''):
-            # TODO: check first chunk for expected format.
-            print chunk
-        respStream.close()
-        resp.close()
-
-    def fetchDataStream(self, idStr, dbName, dataFormat, resultStyle):
-        '''
-        Fetch data.
-
-        Parameters:
+        - fh: stream/file handle opened for write. Use sys.stdout for STDOUT.
         - idStr: list of entry identifiers as a delimited string.
         - dbName: database name
         - dataFormat: data format name
         - resultStyle: result style name
 
-        Returns: a response object and a file-like object which is used 
-        to access the contents of the response.
+        Returns:
+        Nothing.
 
         Throws:
         - BiofetchError: if requested combination of dbName, dataFormat or 
@@ -287,19 +270,52 @@ class BioFetch(object):
         # Look for data sources matching request.
         serviceDataSources = self._getDataSourcesForFetch(dbName, dataFormat, resultStyle)
         # Loop over matching services trying each to get data.
+        exceptionList = []
+        dataReturned = False
         for service in serviceDataSources:
             serviceStr = self._resolveServiceTemplate(service, idStr, dbName, dataFormat, resultStyle)
             try:
                 # TODO: Load requested DataSource class.
                 if service['primaryAccess']['accessType'] == 'url':
                     dataSource = UrlDataSource()
-                return dataSource.getDataStream(serviceStr)
+                # Read data from source to file handle.
+                (resp, respStream) = dataSource.getDataStream(serviceStr)
+                contentType = resp.info().getheader('Content-Type')
+                # Grab first chunk and check data format against 'match' regex
+                firstChunk = respStream.read(self.settings['chunkSize'])
+                # Check data format.
+                if self.isFormatMatch(dataFormat, firstChunk):
+                    # TODO: check for CGI web context.
+                    print 'Content-Type: {0}\n'.format(contentType)
+                    # Output the chunk and pass through any remaining data.
+                    fh.write(firstChunk)
+                    for chunk in iter(lambda: respStream.read(self.settings['chunkSize']), ''):
+                        fh.write(chunk)
+                    dataReturned = True
+                    break
+                # Close the source data streams.
+                respStream.close()
+                resp.close()
             except IOError, e:
                 # Record exception and move on to next service.
-                pass
+                exceptionList.append(e)
         # Failed to find working data source.
-        # TODO: Re-throw least severe exception.
-        raise e
+        if dataReturned == False:
+            if len(exceptionList):
+                # TODO: Re-throw least severe exception.
+                raise exceptionList[0]
+            else:
+                raise BiofetchError(12, 'No entries found.')
+
+    def isFormatMatch(self, dataFormat, dataChunk):
+        '''
+        '''
+        retVal = False
+        if dataFormat in self.formatMatch:
+            reStr = self.formatMatch[dataFormat]
+            if re.search(reStr, dataChunk) != None:
+                retVal = True
+        return retVal
 
     def _getDataSourcesForFetch(self, dbName, dataFormat, resultStyle):
         '''
@@ -344,6 +360,7 @@ class BioFetch(object):
             settingsFile = directory + '/' + 'settings.json'
             if os.path.isfile(settingsFile):
                 self.settings = self._readJSONFile(settingsFile)
+                # Load database configuration file.
                 if self.settings['databaseConfig']:
                     if self.settings['databaseConfig'].startswith('/'):
                         databasesFile = self.settings['databaseConfig']
@@ -351,6 +368,14 @@ class BioFetch(object):
                         databasesFile = directory + '/' + self.settings['databaseConfig']
                     if os.path.isfile(databasesFile):
                         self.databases = self._readJSONFile(databasesFile)
+                # Load data format matches configuration file.
+                if self.settings['dataFormatMatchConfig']:
+                    if self.settings['dataFormatMatchConfig'].startswith('/'):
+                        formatMatchFile = self.settings['dataFormatMatchConfig']
+                    else:
+                        formatMatchFile = directory + '/' + self.settings['dataFormatMatchConfig']
+                    if os.path.isfile(formatMatchFile):
+                        self.formatMatch = self._readJSONFile(formatMatchFile)
 
     def _readJSONFile(self, filename):
         '''Read data from a JSON format data file.'''

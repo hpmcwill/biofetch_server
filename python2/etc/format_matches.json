@@ -1,0 +1,6 @@
+{
+  "embl": "ID   (\\S+)",
+  "fasta": "^>\\s*\\w+.\\w+|\\n&gt;\\s*\\w+.(<[^>]+>)?\\w+",
+  "pdb": "HEADER    ",
+  "uniprot": "ID   (\\w+)"
+}

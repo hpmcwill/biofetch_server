@@ -4,5 +4,6 @@
   "timeOut": 60,
   "chunkSize":204800,
   "defaultDatabase": "embl",
-  "databaseConfig": "databases.json"
+  "databaseConfig": "databases.json",
+  "dataFormatMatchConfig": "format_matches.json"
 }
