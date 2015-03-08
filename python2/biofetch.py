@@ -246,12 +246,23 @@ class BioFetch(object):
         to access the contents of the response.
         '''
         # Find matching service data sources.
+        if not dbName in self.databases:
+            raise BiofetchError(1, 'Unknown database [' + dbName + ']')
         databaseConfig = self.databases[dbName]
         serviceDataSources = []
+        dataFormatFound = False
+        resultStyleFound = False
         for service in databaseConfig['serviceList']:
-            if(dataFormat in service['dataFormats'] and 
-               resultStyle in service['dataFormats'][dataFormat]['resultStyles']):
-                serviceDataSources.append(service)
+            if dataFormat in service['dataFormats']:
+                dataFormatFound = True
+                if resultStyle in service['dataFormats'][dataFormat]['resultStyles']:
+                    resultStyleFound = True
+                    serviceDataSources.append(service)
+        # Check that data format and result style were found.
+        if dataFormatFound == False:
+            raise BiofetchError(3, 'Format [{0}] not known for database [{1}].'.format(dataFormat, dbName))
+        if resultStyleFound == False:
+            raise BiofetchError(2, 'Unknown style [{0}]'.format(resultStyle))
         # Loop over services trying each to get data.
         for service in serviceDataSources:
             serviceStr = self._resolveServiceTemplate(service, idStr, dbName, dataFormat, resultStyle)

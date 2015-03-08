@@ -122,8 +122,8 @@ try:
         print 'Content-Type: {0}\n'.format(contentType)
         for chunk in iter(lambda: respStream.read(biofetch.settings['chunkSize']), ''):
             print chunk
-            respStream.close()
-            resp.close()
+        respStream.close()
+        resp.close()
     # No idea what was intended, so return form.
     else:
         printBiofetchForm()
