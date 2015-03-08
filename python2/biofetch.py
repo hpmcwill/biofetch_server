@@ -238,16 +238,87 @@ class BioFetch(object):
         resp.close()
         return result
 
+    def fetchDataToStream(self, fh, idStr, dbName, dataFormat, resultStyle):
+        '''
+        Fetch data to a stream/file.
+
+        Parameters:
+        - fh: stream/file handle opened for write.
+        - idStr:
+        - dbName:
+        - dataFormat:
+        - resultStyle:
+
+        Returns:
+        ?
+
+        Throws:
+        - BiofetchError
+        '''
+        (resp, respStream) = self.fetchDataStream(idStr, dbName, dataFormat, resultStyle)
+        contentType = resp.info().getheader('Content-Type')
+        # TODO: check for CGI web context.
+        print 'Content-Type: {0}\n'.format(contentType)
+        for chunk in iter(lambda: respStream.read(self.settings['chunkSize']), ''):
+            # TODO: check first chunk for expected format.
+            print chunk
+        respStream.close()
+        resp.close()
+
     def fetchDataStream(self, idStr, dbName, dataFormat, resultStyle):
         '''
         Fetch data.
 
+        Parameters:
+        - idStr: list of entry identifiers as a delimited string.
+        - dbName: database name
+        - dataFormat: data format name
+        - resultStyle: result style name
+
         Returns: a response object and a file-like object which is used 
         to access the contents of the response.
+
+        Throws:
+        - BiofetchError: if requested combination of dbName, dataFormat or 
+        resultStyle not found in biofetch configuration.
         '''
-        # Find matching service data sources.
-        if not dbName in self.databases:
-            raise BiofetchError(1, 'Unknown database [' + dbName + ']')
+        # Handle default values for parameters.
+        dbName, dataFormat, resultStyle = self._handleDefaultFetchValues(dbName, dataFormat, resultStyle)
+        # Look for data sources matching request.
+        serviceDataSources = self._getDataSourcesForFetch(dbName, dataFormat, resultStyle)
+        # Loop over matching services trying each to get data.
+        for service in serviceDataSources:
+            serviceStr = self._resolveServiceTemplate(service, idStr, dbName, dataFormat, resultStyle)
+            try:
+                # TODO: Load requested DataSource class.
+                if service['primaryAccess']['accessType'] == 'url':
+                    dataSource = UrlDataSource()
+                return dataSource.getDataStream(serviceStr)
+            except IOError, e:
+                # Record exception and move on to next service.
+                pass
+        # Failed to find working data source.
+        # TODO: Re-throw least severe exception.
+        raise e
+
+    def _getDataSourcesForFetch(self, dbName, dataFormat, resultStyle):
+        '''
+        Get a list of data sources matching a combination of database 
+        name, data format name and result style name.
+
+        Parameters:
+        - dbName: database name
+        - dataFormat: data format name
+        - resultStyle: result style name
+
+        Returns:
+        A list of data source service configurations which detail how to obatin 
+        the requested data format and result style from the required database.
+
+        Throws:
+        - BiofetchError if no configurations matching the requested 
+        combination of data format and result style are found.
+        '''
         databaseConfig = self.databases[dbName]
         serviceDataSources = []
         dataFormatFound = False
@@ -263,20 +334,7 @@ class BioFetch(object):
             raise BiofetchError(3, 'Format [{0}] not known for database [{1}].'.format(dataFormat, dbName))
         if resultStyleFound == False:
             raise BiofetchError(2, 'Unknown style [{0}]'.format(resultStyle))
-        # Loop over services trying each to get data.
-        for service in serviceDataSources:
-            serviceStr = self._resolveServiceTemplate(service, idStr, dbName, dataFormat, resultStyle)
-            try:
-                # TODO: Load requested DataSource class.
-                if service['primaryAccess']['accessType'] == 'url':
-                    dataSource = UrlDataSource()
-                return dataSource.getDataStream(serviceStr)
-            except IOError, e:
-                # Record exception and move on to next service.
-                pass
-        # Failed to find working data source.
-        # TODO: Re-throw least severe exception.
-        raise e
+        return serviceDataSources
 
     def readConfig(self, directory):
         '''
@@ -300,6 +358,26 @@ class BioFetch(object):
         json_data = json.load(json_file)
         json_file.close()
         return json_data
+
+    def _handleDefaultFetchValues(self, dbName, dataFormat, resultStyle):
+        '''
+        Handle mapping of undefined or 'default' fetch parameters to 
+        the actual values as defained in the configuration.
+        '''
+        # Handle default database name.
+        if dbName == None or dbName == '' or dbName == 'default':
+            dbName = self.settings['defaultDatabase']
+        # Find matching service data sources.
+        if not dbName in self.databases:
+            raise BiofetchError(1, 'Unknown database [' + dbName + ']')
+        databaseConfig = self.databases[dbName]
+        # Handle default data format name.
+        if dataFormat == None or dataFormat == '' or dataFormat == 'default':
+            dataFormat = databaseConfig['defaultDataFormat']
+        # Handle default result style name.
+        if resultStyle == None or resultStyle == '' or resultStyle == 'default':
+            resultStyle = databaseConfig['defaultResultStyles'][dataFormat]
+        return (dbName, dataFormat, resultStyle)
 
     def _expandTemplateString(self, templateStr, idListStr, dbName, dataFormat, resultStyle):
         '''
@@ -325,6 +403,10 @@ class BioFetch(object):
         '''
         Populate a service template to fetch the requested data.
         '''
+        # Split list into individual identifiers.
+        idList = re.split(r'[ +,]+', idStr)
+        if len(idList) > self.settings['maxEntries']:
+            raise BiofetchError(5, 'Too many IDs [{0}]. Max [{1}] allowed.'.format(len(idList), self.settings['maxEntries']))
         # Process the identifier list.
         if 'idCharacterCase' in service['primaryAccess']:
             if service['primaryAccess']['idCharacterCase'] == 'upper':

@@ -16,78 +16,16 @@ from biofetch import BioFetch, BiofetchError
 
 # Get parameters from GET or POST request.
 form = cgi.FieldStorage()
+# Initialise biofetch object.
+biofetch = BioFetch()
 
 def printBiofetchForm():
     '''Output BioFetch web form.'''
     print 'Content-Type: text/html\n'
-    print '''
-<html>
-<head>
-<title>BioFetch</title>
-</head>
-<body>
-<h1 align="center">BioFetch</h1>
-<hr />
-<form action="biofetch.cgi" method="GET">
-<ul>
-  <li>Database: 
-    <select name="db">
-      <option>embl</option>
-      <option>genbank</option>
-      <option>pdb</option>
-      <option>swall</option>
-    </select>
-  </li>
-  <li>Data format:
-    <select name="format">
-      <option>embl</option>
-      <option>fasta</option>
-      <option>genbank</option>
-      <option>pdb</option>
-      <option>swissprot</option>
-    </select>
-  </li>
-  <li>Result style:
-    <select name="style">
-      <option>html</option>
-      <option>raw</option>
-    </select>
-  </li>
-  <li>Identifiers:
-    <input type="text" name="id" />
-  </li>
-</ul>
-<input type="submit" />
-</form>
-<hr />
-</body>
-</html>
-'''
-
-def formParametersDebugHtmlOutput():
-    '''
-    Output a HTML page for debugging the parameters.
-    '''
-    print 'Content-Type: text/html\n'
-    debugParams = Template('''<html>
-<head>
-<title>BioFetch</title>
-</head>
-<body>
-<h1 align="center">BioFetch</h1>
-<hr />
-<p>db: ${db}</p>
-<p>format: ${format}</p>
-<p>style: ${style}</p>
-<p>id: ${id}</p>
-<hr />
-</body>
-</html>
-''')
-    print debugParams.safe_substitute(form)
-
-# Initialise biofetch object.
-biofetch = BioFetch()
+    htmlFile = open('etc/biofetch_form.html', 'r')
+    formHtml = htmlFile.read()
+    # TODO: insert databases, formats and styles from the BioFetch config.
+    print formHtml
 
 try:
     # No parameters so just return the form.
@@ -116,14 +54,22 @@ try:
         except BiofetchError, e:
             print e
     elif 'id' in form and len(form['id'].value) > 0:
-        # Got identifiers so fetch entries.
-        (resp, respStream) = biofetch.fetchDataStream(form['id'].value, form['db'].value, form['format'].value, form['style'].value)
-        contentType = resp.info().getheader('Content-Type')
-        print 'Content-Type: {0}\n'.format(contentType)
-        for chunk in iter(lambda: respStream.read(biofetch.settings['chunkSize']), ''):
-            print chunk
-        respStream.close()
-        resp.close()
+        # Handle default values.
+        dbName = 'default'
+        if 'db' in form and len(form['db'].value) > 0:
+            dbName = form['db'].value
+        dataFormat = 'default'
+        if 'format' in form and len(form['format'].value) > 0:
+            dataFormat = form['format'].value
+        resultStyle = 'default'
+        if 'style' in form and len(form['style'].value) > 0:
+            resultStyle = form['style'].value
+        # Got identifiers so fetch entries to STDOUT.
+        biofetch.fetchDataToStream(sys.stdout, 
+                                   form['id'].value, 
+                                   dbName, 
+                                   dataFormat, 
+                                   resultStyle)
     # No idea what was intended, so return form.
     else:
         printBiofetchForm()
