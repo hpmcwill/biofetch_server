@@ -1,92 +1,62 @@
 #!/usr/bin/env python
 # ======================================================================
 # A Python 2.x implementation of a BioFetch library.
-# ======================================================================
+# ----------------------------------------------------------------------
+# See:
+# - GitHub repository: https://github.com/hpmcwill/biofetch_server/
+# - OBDA BioFetch specification:
+#   https://github.com/OBF/OBDA/tree/master/biofetch
+#
 # TODO:
 # - Handlers for specific data sources
 # - Support for indexing sources [BioPython?]
-# - Support for extensions to the BioFetch spec.
 # - Response format and content-type checking
-# - Command-line support (check for CGI variables)
 # - Library/module support
 # ======================================================================
 # Module imports
 import json, platform, os, re, sys, urllib2
+from abc import ABCMeta, abstractmethod
 from bz2 import BZ2File
 from gzip import GzipFile
-from StringIO import StringIO
-from string import Template
 from os.path import exists, isfile
+from string import Template
+from StringIO import StringIO
 
-class BioFetch(object):
+class BiofetchError(Exception):
+    def __init__(self, errNo, message):
+        self.errNo = errNo
+        self.message = message
+
+    def __str__(self):
+        return 'Error {0}: {1}'.format(self.errNo, self.message)
+
+class AbstractDataSource(object):
     '''
-    BioFetch based data access library.
+    Abstract definition for a DataSource for use by BioFetch. Classes 
+    implementing DataSources must inherit from this abstract class and 
+    implement the abstract methods.
     '''
-    CLIENT_VERSION = '0'  # Version number for User-agent.
+    __metaclass__ = ABCMeta
 
-    def __init__(self, configDir=None):
-        '''
-        Parameters:
-        * configDir: optional directory containing a set of BioFetch configuration
-        files.
-        '''
-        if configDir != None:
-            self.readConfig(configDir)
-        else:
-            self.readConfig('etc')
+    @abstractmethod
+    def getDataStream():
+        '''Get a data stream from the data source.'''
+        pass
 
-    def fetchData(self, idStr, dbName, dataFormat, resultStyle):
-        '''
-        Fetch data.
+class UrlDataSource(AbstractDataSource):
+    '''
+    A URL based DataSource for accessing data sources via:
+    - HTTP GET
+    - FTP
+    '''
 
-        Returns: the data returned by the back-end service.
-        '''
-        # Fetch the data stream from the URL.
-        (resp, respStream) = self.fetchDataStream(idStr, dbName, dataFormat, resultStyle)
-        # Read into a string.
-        result = respStream.read()
-        # Close the streams.
-        respStream.close()
-        resp.close()
-        return result
-
-    def fetchDataStream(self, idStr, dbName, dataFormat, resultStyle):
-        '''
-        Fetch data.
-
-        Returns: a HTTP response object and a file handle like object which is used 
-        to access the contents of the response.
-        '''
-        # TODO: Generate service URL.
-        url = self._getServiceUrl(idStr, dbName, dataFormat, resultStyle)
-        # Fetch the data from the URL.
-        return self._httpGetRequest(url)
-
-    def readConfig(self, directory):
-        '''
-        Read a set of files describing a BioFetch configuration from a directory.
-        '''
-        if directory != None and os.path.exists(directory):
-            settingsFile = directory + '/' + 'settings.json'
-            if os.path.isfile(settingsFile):
-                self.settings = self._readJSONFile(settingsFile)
-                if self.settings['databaseConfig']:
-                    if self.settings['databaseConfig'].startswith('/'):
-                        databasesFile = self.settings['databaseConfig']
-                    else:
-                        databasesFile = directory + '/' + self.settings['databaseConfig']
-                    if os.path.isfile(databasesFile):
-                        self.databases = self._readJSONFile(databasesFile)
-
-    def _readJSONFile(self, filename):
-        '''Read data from a JSON format data file.'''
-        json_file = open(filename, 'r')
-        json_data = json.load(json_file)
-        json_file.close()
-        return json_data
+    def __init__(self):
+        pass
 
     def _getUserAgent(self):
-        '''Generate an appropriate User-agent string.'''
+        '''
+        Generate a User-agent string for use in HTTP requests.
+        '''
         urllib_agent = 'Python-urllib/%s' % urllib2.__version__
         user_agent = 'BioFetch/%s (%s; Python %s; %s) %s' % (
             BioFetch.CLIENT_VERSION,
@@ -97,7 +67,7 @@ class BioFetch(object):
         )
         return user_agent
 
-    def _httpGetRequest(self, url):
+    def getDataStream(self, url):
         '''
         Fetch a resource specified by a URL using HTTP GET.
         Adds support for HTTP compression.
@@ -156,6 +126,170 @@ class BioFetch(object):
             raise IOError(0, 'Unsupported Content-Encoding: %s' % (encoding))
         return retStream
 
+class BioFetch(object):
+    '''
+    BioFetch based data access library.
+    '''
+    CLIENT_VERSION = '0'  # Version number for User-agent.
+
+    def __init__(self, configDir=None):
+        '''
+        Parameters:
+        * configDir: optional directory containing a set of BioFetch configuration
+        files.
+        '''
+        if configDir != None:
+            self.readConfig(configDir)
+        else:
+            self.readConfig('etc')
+
+    #
+    # Meta-data access methods.
+    #
+
+    def getMaxIds(self):
+        '''
+        Get the maximum number of identifers accepted for a single request.
+        '''
+        return self.settings['maxEntries']
+
+    def getDatabaseNames(self):
+        '''
+        Get a list of the names of the available databases.
+
+        Returns:
+        A sorted list of database names.
+        '''
+        databaseNameList = self.databases.keys()
+        if databaseNameList != None and len(databaseNameList) > 1:
+            databaseNameList.sort()
+        return databaseNameList
+
+    def getDbFormatNames(self, dbName):
+        '''
+        Get a list of the available data format names for a specified database.
+        
+        Parameters:
+        - dbName: the name of the database.
+
+        Returns:
+        A sorted list of data format names.
+        '''
+        # Check database exists in configuration.
+        if not dbName in self.databases:
+            raise BiofetchError(1, 'Unknown database [' + dbName + ']')
+        databaseConfig = self.databases[dbName]
+        # Get list of available formats, removing duplicates.
+        formatNamesDict = {}
+        for service in databaseConfig['serviceList']:
+            for formatName in service['dataFormats'].keys():
+                formatNamesDict[formatName] = 1
+        # Sort the list of data format names.
+        formatNamesList = formatNamesDict.keys()
+        if formatNamesList != None and len(formatNamesList) > 1:
+            formatNamesList.sort()
+        return formatNamesList
+
+    def getDbFormatStyleNames(self, dbName, formatName):
+        '''
+        Get a list of the available result style names for a specified data 
+        format of a specifed database.
+
+        Parameters:
+        - dbName: the name of the database.
+        - formatName: the name of the data format.
+        '''
+        # Check database exists in configuration.
+        if not dbName in self.databases:
+            raise BiofetchError(1, 'Unknown database [' + dbName + ']')
+        databaseConfig = self.databases[dbName]
+        # Get list of available styles, removing duplicates.
+        dataFormatFound = False
+        styleNamesDict = {}
+        for service in databaseConfig['serviceList']:
+            if formatName in service['dataFormats']:
+                dataFormatFound = True
+                for styleName in service['dataFormats'][formatName]['resultStyles'].keys():
+                    styleNamesDict[styleName] = 1
+        if dataFormatFound == False:
+            raise BiofetchError(3, 'Format [{0}] not known for database [{1}])'.format(formatName, dbName))
+        # Sort the list of result style names.
+        styleNamesList = styleNamesDict.keys()
+        if styleNamesList != None and len(styleNamesList) > 1:
+            styleNamesList.sort()
+        return styleNamesList
+
+    #
+    # Data retrival methods.
+    #
+
+    def fetchData(self, idStr, dbName, dataFormat, resultStyle):
+        '''
+        Fetch data.
+
+        Returns: the data returned by the back-end service.
+        '''
+        # Fetch the data stream from the URL.
+        (resp, respStream) = self.fetchDataStream(idStr, dbName, dataFormat, resultStyle)
+        # Read into a string.
+        result = respStream.read()
+        # Close the streams.
+        respStream.close()
+        resp.close()
+        return result
+
+    def fetchDataStream(self, idStr, dbName, dataFormat, resultStyle):
+        '''
+        Fetch data.
+
+        Returns: a response object and a file-like object which is used 
+        to access the contents of the response.
+        '''
+        # Find matching service data sources.
+        databaseConfig = self.databases[dbName]
+        serviceDataSources = []
+        for service in databaseConfig['serviceList']:
+            if(dataFormat in service['dataFormats'] and 
+               resultStyle in service['dataFormats'][dataFormat]['resultStyles']):
+                serviceDataSources.append(service)
+        # Loop over services trying each to get data.
+        for service in serviceDataSources:
+            serviceStr = self._resolveServiceTemplate(service, idStr, dbName, dataFormat, resultStyle)
+            try:
+                # TODO: Load requested DataSource class.
+                if service['primaryAccess']['accessType'] == 'url':
+                    dataSource = UrlDataSource()
+                return dataSource.getDataStream(serviceStr)
+            except IOError, e:
+                # Record exception and move on to next service.
+                pass
+        # Failed to find working data source.
+        # TODO: Re-throw least severe exception.
+        raise e
+
+    def readConfig(self, directory):
+        '''
+        Read a set of files describing a BioFetch configuration from a directory.
+        '''
+        if directory != None and os.path.exists(directory):
+            settingsFile = directory + '/' + 'settings.json'
+            if os.path.isfile(settingsFile):
+                self.settings = self._readJSONFile(settingsFile)
+                if self.settings['databaseConfig']:
+                    if self.settings['databaseConfig'].startswith('/'):
+                        databasesFile = self.settings['databaseConfig']
+                    else:
+                        databasesFile = directory + '/' + self.settings['databaseConfig']
+                    if os.path.isfile(databasesFile):
+                        self.databases = self._readJSONFile(databasesFile)
+
+    def _readJSONFile(self, filename):
+        '''Read data from a JSON format data file.'''
+        json_file = open(filename, 'r')
+        json_data = json.load(json_file)
+        json_file.close()
+        return json_data
+
     def _expandTemplateString(self, templateStr, idListStr, dbName, dataFormat, resultStyle):
         '''
         Expand a URL or other template string by subsituting the following tokens:
@@ -176,31 +310,24 @@ class BioFetch(object):
         expandedStr = template.safe_substitute(paramDict)
         return expandedStr
 
-    def _getServiceUrl(self, idListStr, dbName, dataFormat, resultStyle):
+    def _resolveServiceTemplate(self, service, idStr, dbName, dataFormat, resultStyle):
         '''
-        Generate a GET URL for a service which will fetch the requested data.
+        Populate a service template to fetch the requested data.
         '''
-        databaseConfig = self.databases[dbName]
-        # Use the first service that provides the selected format and style.
-        for service in databaseConfig['serviceList']:
-            if(service['primaryAccess']['accessType'] == 'url' and
-               dataFormat in service['dataFormats'] and 
-               resultStyle in service['dataFormats'][dataFormat]['resultStyles']):
-                break
-        if service:
-            # Process the identifier list.
-            if 'idCharacterCase' in service['primaryAccess']:
-                if service['primaryAccess']['idCharacterCase'] == 'upper':
-                    idListStr = idListStr.upper()
-                elif service['primaryAccess']['idCharacterCase'] == 'lower':
-                    idListStr = idListStr.lower()
-            if 'idSeparator' in service['primaryAccess']:
-                idListStr = re.sub(r'[ +,]+', service['primaryAccess']['idSeparator'], idListStr)
-        url = self._expandTemplateString(
-            service['primaryAccess']["urlTemplate"], 
-            idListStr,
+        # Process the identifier list.
+        if 'idCharacterCase' in service['primaryAccess']:
+            if service['primaryAccess']['idCharacterCase'] == 'upper':
+                idStr = idStr.upper()
+            elif service['primaryAccess']['idCharacterCase'] == 'lower':
+                idStr = idStr.lower()
+        if 'idSeparator' in service['primaryAccess']:
+            idStr = re.sub(r'[ +,]+', service['primaryAccess']['idSeparator'], idStr)
+        expandedStr = self._expandTemplateString(
+            service['primaryAccess']['urlTemplate'], 
+            idStr,
             dbName,
             service['dataFormats'][dataFormat]['value'],
             service['dataFormats'][dataFormat]['resultStyles'][resultStyle]
             )
-        return url
+        return expandedStr
+

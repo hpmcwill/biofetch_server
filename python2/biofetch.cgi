@@ -1,17 +1,18 @@
 #!/usr/bin/python
 # ======================================================================
 # A Python 2.x implementation of a CGI based BioFetch server.
-# ======================================================================
-# TODO:
-# - Support for extensions to the BioFetch spec.
-# - Command-line support (check for CGI variables)
+# ----------------------------------------------------------------------
+# See:
+# - GitHub repository: https://github.com/hpmcwill/biofetch_server/
+# - OBDA BioFetch specification:
+#   https://github.com/OBF/OBDA/tree/master/biofetch
 # ======================================================================
 # Module imports
 import cgi, re, sys, traceback, urllib2
 import cgitb
 cgitb.enable()
 from string import Template
-from biofetch import BioFetch
+from biofetch import BioFetch, BiofetchError
 
 # Get parameters from GET or POST request.
 form = cgi.FieldStorage()
@@ -85,26 +86,51 @@ def formParametersDebugHtmlOutput():
 ''')
     print debugParams.safe_substitute(form)
 
-# No parameters so just return the form.
-if len(form.keys()) == 0:
-    printBiofetchForm()
-elif 'id' in form and len(form['id'].value) > 0:
-    # Got identifiers so fetch entries.
-    try:
-	biofetch = BioFetch()
+# Initialise biofetch object.
+biofetch = BioFetch()
+
+try:
+    # No parameters so just return the form.
+    if len(form.keys()) == 0:
+        printBiofetchForm()
+    # biofetch.rb style meta-data requests.
+    elif 'info' in form:
+        print 'Content-Type: text/plain\n'
+        try:
+            if form['info'].value == 'maxids':
+                print biofetch.getMaxIds()
+            elif form['info'].value == 'dbs':
+                dbNameList = biofetch.getDatabaseNames()
+                for dbName in dbNameList:
+                    print dbName
+            elif form['info'].value == 'formats':
+                formatNameList = biofetch.getDbFormatNames(form['db'].value)
+                for formatName in formatNameList:
+                    print formatName
+            elif form['info'].value == 'styles':
+                styleNameList = biofetch.getDbFormatStyleNames(form['db'].value, form['format'].value)
+                for styleName in styleNameList:
+                    print styleName
+            else:
+                print 'Error 6: Unknown information.'
+        except BiofetchError, e:
+            print e
+    elif 'id' in form and len(form['id'].value) > 0:
+        # Got identifiers so fetch entries.
         (resp, respStream) = biofetch.fetchDataStream(form['id'].value, form['db'].value, form['format'].value, form['style'].value)
         contentType = resp.info().getheader('Content-Type')
         print 'Content-Type: {0}\n'.format(contentType)
         for chunk in iter(lambda: respStream.read(biofetch.settings['chunkSize']), ''):
             print chunk
-        respStream.close()
-        resp.close()
-    except IOError, e:
-        print 'Content-Type: text/plain\n'
-        print 'ERROR:', '{0} {1} {2}\n'.format(e.errno, e.strerror, e.filename)
-	traceback.print_exc(file=sys.stdout)
-    #formParametersDebugHtmlOutput() # DEBUG
-# TODO: Handle meta-data resource requests.
-# No idea what was intended, so return form.
-else:
-    printBiofetchForm()
+            respStream.close()
+            resp.close()
+    # No idea what was intended, so return form.
+    else:
+        printBiofetchForm()
+except BiofetchError, e:
+    print 'Content-Type: text/plain\n'
+    print e
+except IOError, e:
+    print 'Content-Type: text/plain\n'
+    print 'ERROR:', '{0} {1} {2}\n'.format(e.errno, e.strerror, e.filename)
+    traceback.print_exc(file=sys.stdout)
